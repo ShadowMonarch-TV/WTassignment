@@ -1,0 +1,52 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Science Quiz - Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body class="auth-page">
+  <div class="bg-shape shape-1"></div>
+  <div class="bg-shape shape-2"></div>
+
+  <main class="auth-layout">
+    <section class="hero-panel">
+      <p class="tag">Assessment Platform</p>
+      <h1>Fundamentals of Data Science</h1>
+      <p class="lead">Secure student login and database-backed MCQ evaluation for practical assessments.</p>
+      <ul class="feature-list">
+        <li>Real backend API</li>
+        <li>PostgreSQL persistent storage</li>
+        <li>Instant scoring and submission tracking</li>
+      </ul>
+    </section>
+
+    <section class="auth-card">
+      <h2>Login</h2>
+      <p class="sub">Sign in to start your test.</p>
+
+      <form id="loginForm" class="form-grid">
+        <label>
+          Username
+          <input type="text" id="username" name="username" placeholder="e.g. student_01" required />
+        </label>
+
+        <label>
+          Password
+          <input type="password" id="password" name="password" placeholder="Enter password" required />
+        </label>
+
+        <button type="submit" id="loginBtn">Login</button>
+      </form>
+
+      <p id="statusMsg" class="status">New student? <a href="/register.html">Create account</a></p>
+    </section>
+  </main>
+
+  <script src="/assets/login.js"></script>
+</body>
+</html>

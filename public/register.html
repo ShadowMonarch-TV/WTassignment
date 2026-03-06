@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Science Quiz - Register</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body class="auth-page">
+  <div class="bg-shape shape-1"></div>
+  <div class="bg-shape shape-2"></div>
+
+  <main class="auth-layout single-card">
+    <section class="auth-card wide">
+      <h2>Student Registration</h2>
+      <p class="sub">Create your account for the Data Science MCQ test.</p>
+
+      <form id="registerForm" class="form-grid">
+        <label>
+          Full Name
+          <input type="text" id="fullName" name="fullName" placeholder="Your full name" required />
+        </label>
+
+        <label>
+          Username
+          <input type="text" id="username" name="username" placeholder="Only letters, numbers, underscore" required />
+        </label>
+
+        <label>
+          Password
+          <input type="password" id="password" name="password" placeholder="Minimum 6 characters" required />
+        </label>
+
+        <button type="submit" id="registerBtn">Create Account</button>
+      </form>
+
+      <p id="registerMsg" class="status">Already registered? <a href="/index.html">Go to login</a></p>
+    </section>
+  </main>
+
+  <script src="/assets/register.js"></script>
+</body>
+</html>
