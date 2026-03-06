@@ -1,9 +1,10 @@
-﻿# Data Science MCQ App
+# WTassignment - Data Science MCQ App
 
-Production-ready student assessment app with:
-- Modern responsive UI (login, registration, quiz)
+Web Technology assignment upgraded into a production-ready quiz platform with:
+- Modern responsive UI (login, registration, timed quiz)
 - Java backend API
 - PostgreSQL database integration
+- Leaderboard for participating students
 - Render deployment blueprint
 
 ## Tech Stack
@@ -17,6 +18,7 @@ Production-ready student assessment app with:
 - `POST /api/login`
 - `GET /api/questions` (Bearer token)
 - `POST /api/submit` (Bearer token)
+- `GET /api/leaderboard` (Bearer token)
 - `GET /api/health`
 
 ## Local Run
@@ -44,9 +46,6 @@ java -jar target/ds-quiz-app.jar
 ## Render Deployment
 `render.yaml` is included for Blueprint deploy with web service + managed PostgreSQL.
 
-1. Push this project to GitHub/GitLab/Bitbucket.
-2. In Render Dashboard, create from Blueprint (`render.yaml`).
-3. Apply the plan and deploy.
-
-Render URL pattern after deploy:
-- `https://<your-service>.onrender.com`
+1. Push project to GitHub/GitLab/Bitbucket.
+2. Open Render Blueprint flow.
+3. Apply and deploy.
