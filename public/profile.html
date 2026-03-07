@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body class="quiz-page">
+  <header class="topbar">
+    <div>
+      <p class="tag">Student Profile</p>
+      <h1>Account and Attempt History</h1>
+      <p id="profileMeta" class="sub small"></p>
+    </div>
+    <div class="admin-actions">
+      <button id="quizBtn" class="btn-outline">Back to Quiz</button>
+      <button id="logoutBtn" class="btn-outline">Logout</button>
+    </div>
+  </header>
+
+  <main class="quiz-shell admin-grid">
+    <section class="quiz-card">
+      <h2>Update Profile</h2>
+      <form id="profileForm" class="form-grid admin-form">
+        <label>
+          Full Name
+          <input type="text" id="fullName" required />
+        </label>
+        <button type="submit">Save Profile</button>
+      </form>
+      <p id="profileMsg" class="status"></p>
+    </section>
+
+    <section class="quiz-card">
+      <h2>My Attempts</h2>
+      <div id="myAttemptsWrap" class="table-wrap"></div>
+    </section>
+  </main>
+
+  <script src="/assets/profile.js"></script>
+</body>
+</html>

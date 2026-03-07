@@ -21,6 +21,15 @@
 
   <main class="quiz-shell admin-grid">
     <section class="quiz-card">
+      <h2>Platform Summary</h2>
+      <div id="summaryCards" class="summary-grid"></div>
+      <div class="admin-actions" style="margin-top:0.8rem;">
+        <button id="exportUsersBtn" class="btn-outline">Export Users CSV</button>
+        <button id="exportAttemptsBtn" class="btn-outline">Export Attempts CSV</button>
+      </div>
+    </section>
+
+    <section class="quiz-card">
       <h2>Quiz Settings</h2>
       <form id="settingsForm" class="form-grid admin-form">
         <label>
@@ -66,11 +75,32 @@
 
     <section class="quiz-card">
       <h2>Users</h2>
+      <form id="userManageForm" class="form-grid admin-form">
+        <label>Username<input type="text" id="manageUsername" required /></label>
+        <label>Role
+          <select id="manageRole">
+            <option value="student">student</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <div class="admin-actions">
+          <button type="button" id="updateRoleBtn">Update Role</button>
+          <button type="button" id="deleteUserBtn" class="btn-outline">Delete User</button>
+        </div>
+      </form>
+      <p id="userManageMsg" class="status"></p>
       <div id="usersTableWrap" class="table-wrap"></div>
     </section>
 
     <section class="quiz-card">
       <h2>Recent Attempts</h2>
+      <form id="attemptResetForm" class="form-grid admin-form">
+        <label>Username<input type="text" id="resetUsername" required /></label>
+        <div class="admin-actions">
+          <button type="button" id="resetAttemptsBtn" class="btn-outline">Reset Attempts</button>
+        </div>
+      </form>
+      <p id="attemptResetMsg" class="status"></p>
       <div id="attemptsTableWrap" class="table-wrap"></div>
     </section>
   </main>

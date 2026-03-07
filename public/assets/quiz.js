@@ -1,6 +1,7 @@
 ﻿const quizContainer = document.getElementById("quizContainer");
 const resultCard = document.getElementById("resultCard");
 const logoutBtn = document.getElementById("logoutBtn");
+const profileBtn = document.getElementById("profileBtn");
 const welcomeText = document.getElementById("welcomeText");
 
 const token = localStorage.getItem("ds_token");
@@ -33,6 +34,9 @@ logoutBtn.addEventListener("click", () => {
   localStorage.removeItem("ds_name");
   window.location.href = "/index.html";
 });
+profileBtn.addEventListener("click", () => {
+  window.location.href = "/profile.html";
+});
 
 loadQuestions();
 
@@ -48,6 +52,10 @@ async function loadQuestions() {
     }
 
     const data = await response.json();
+    if (response.status === 403) {
+      quizContainer.innerHTML = `<p class='status error'>${escapeHtml(data.error || "You cannot start the quiz right now.")}</p>`;
+      return;
+    }
     questions = data.questions || [];
     QUESTION_TIME_SECONDS = Number(data.settings?.questionTimeSeconds || 30);
 

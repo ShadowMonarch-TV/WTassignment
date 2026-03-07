@@ -58,10 +58,17 @@ public class Main {
         server.createContext("/api/submit", Main::handleSubmit);
         server.createContext("/api/leaderboard", Main::handleLeaderboard);
         server.createContext("/api/settings", Main::handleSettings);
+        server.createContext("/api/me", Main::handleMe);
+        server.createContext("/api/me/attempts", Main::handleMyAttempts);
         server.createContext("/api/admin/users", Main::handleAdminUsers);
+        server.createContext("/api/admin/users/manage", Main::handleAdminUserManage);
         server.createContext("/api/admin/attempts", Main::handleAdminAttempts);
+        server.createContext("/api/admin/attempts/reset", Main::handleAdminAttemptReset);
         server.createContext("/api/admin/questions", Main::handleAdminQuestions);
         server.createContext("/api/admin/settings", Main::handleAdminSettings);
+        server.createContext("/api/admin/summary", Main::handleAdminSummary);
+        server.createContext("/api/admin/export/users.csv", Main::handleAdminUsersCsv);
+        server.createContext("/api/admin/export/attempts.csv", Main::handleAdminAttemptsCsv);
         server.createContext("/", new StaticFileHandler());
 
         server.setExecutor(Executors.newFixedThreadPool(16));
@@ -546,6 +553,108 @@ public class Main {
         }
     }
 
+    private static void handleMe(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+
+        String username = authenticate(exchange);
+        if (username == null) {
+            sendJson(exchange, 401, Map.of("error", "Unauthorized"));
+            return;
+        }
+
+        if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            String sql = "SELECT username, full_name, role, created_at FROM users WHERE username = ?";
+            try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, username);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        sendJson(exchange, 404, Map.of("error", "User not found"));
+                        return;
+                    }
+                    sendJson(exchange, 200, Map.of(
+                            "username", rs.getString("username"),
+                            "fullName", rs.getString("full_name"),
+                            "role", rs.getString("role"),
+                            "createdAt", rs.getTimestamp("created_at").toInstant().toString()
+                    ));
+                    return;
+                }
+            } catch (SQLException e) {
+                sendJson(exchange, 500, Map.of("error", "Database error while loading profile"));
+                return;
+            }
+        }
+
+        if ("PUT".equalsIgnoreCase(exchange.getRequestMethod())) {
+            UserProfileRequest request;
+            try {
+                request = GSON.fromJson(readBody(exchange), UserProfileRequest.class);
+            } catch (JsonSyntaxException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
+                return;
+            }
+
+            if (request == null || isBlank(request.fullName)) {
+                sendJson(exchange, 400, Map.of("error", "fullName is required"));
+                return;
+            }
+
+            String sql = "UPDATE users SET full_name = ? WHERE username = ?";
+            try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, request.fullName.trim());
+                ps.setString(2, username);
+                ps.executeUpdate();
+                sendJson(exchange, 200, Map.of("success", true, "message", "Profile updated"));
+                return;
+            } catch (SQLException e) {
+                sendJson(exchange, 500, Map.of("error", "Database error while updating profile"));
+                return;
+            }
+        }
+
+        sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+    }
+
+    private static void handleMyAttempts(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+
+        String username = authenticate(exchange);
+        if (username == null) {
+            sendJson(exchange, 401, Map.of("error", "Unauthorized"));
+            return;
+        }
+
+        List<Map<String, Object>> attempts = new ArrayList<>();
+        String sql = """
+                SELECT id, score, total, percentage, submitted_at
+                FROM attempts
+                WHERE username = ?
+                ORDER BY submitted_at DESC
+                LIMIT 100
+                """;
+        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    attempts.add(Map.of(
+                            "id", rs.getLong("id"),
+                            "score", rs.getInt("score"),
+                            "total", rs.getInt("total"),
+                            "percentage", rs.getDouble("percentage"),
+                            "submittedAt", rs.getTimestamp("submitted_at").toInstant().toString()
+                    ));
+                }
+            }
+            sendJson(exchange, 200, Map.of("attempts", attempts));
+        } catch (SQLException e) {
+            sendJson(exchange, 500, Map.of("error", "Database error while loading your attempts"));
+        }
+    }
+
     private static void handleAdminUsers(HttpExchange exchange) throws IOException {
         if (handleCors(exchange)) return;
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -578,6 +687,94 @@ public class Main {
         } catch (SQLException e) {
             sendJson(exchange, 500, Map.of("error", "Database error while loading users"));
         }
+    }
+
+    private static void handleAdminUserManage(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!isAdmin(exchange)) {
+            sendJson(exchange, 403, Map.of("error", "Admin access required"));
+            return;
+        }
+
+        if ("PUT".equalsIgnoreCase(exchange.getRequestMethod())) {
+            AdminUserRoleRequest request;
+            try {
+                request = GSON.fromJson(readBody(exchange), AdminUserRoleRequest.class);
+            } catch (JsonSyntaxException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
+                return;
+            }
+
+            if (request == null || isBlank(request.username) || isBlank(request.role)) {
+                sendJson(exchange, 400, Map.of("error", "username and role are required"));
+                return;
+            }
+
+            String role = request.role.trim().toLowerCase();
+            if (!role.equals("student") && !role.equals("admin")) {
+                sendJson(exchange, 400, Map.of("error", "role must be student or admin"));
+                return;
+            }
+
+            if ("admin".equalsIgnoreCase(request.username)) {
+                sendJson(exchange, 400, Map.of("error", "Default admin role cannot be changed"));
+                return;
+            }
+
+            String sql = "UPDATE users SET role = ? WHERE username = ?";
+            try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, role);
+                ps.setString(2, request.username.trim().toLowerCase());
+                int changed = ps.executeUpdate();
+                if (changed == 0) {
+                    sendJson(exchange, 404, Map.of("error", "User not found"));
+                    return;
+                }
+                sendJson(exchange, 200, Map.of("success", true, "message", "User role updated"));
+                return;
+            } catch (SQLException e) {
+                sendJson(exchange, 500, Map.of("error", "Database error while updating user role"));
+                return;
+            }
+        }
+
+        if ("DELETE".equalsIgnoreCase(exchange.getRequestMethod())) {
+            DeleteUserRequest request;
+            try {
+                request = GSON.fromJson(readBody(exchange), DeleteUserRequest.class);
+            } catch (JsonSyntaxException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
+                return;
+            }
+
+            if (request == null || isBlank(request.username)) {
+                sendJson(exchange, 400, Map.of("error", "username is required"));
+                return;
+            }
+
+            String target = request.username.trim().toLowerCase();
+            if ("admin".equals(target)) {
+                sendJson(exchange, 400, Map.of("error", "Default admin cannot be deleted"));
+                return;
+            }
+
+            String sql = "DELETE FROM users WHERE username = ?";
+            try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, target);
+                int changed = ps.executeUpdate();
+                if (changed == 0) {
+                    sendJson(exchange, 404, Map.of("error", "User not found"));
+                    return;
+                }
+                sendJson(exchange, 200, Map.of("success", true, "message", "User deleted"));
+                return;
+            } catch (SQLException e) {
+                sendJson(exchange, 500, Map.of("error", "Database error while deleting user"));
+                return;
+            }
+        }
+
+        sendJson(exchange, 405, Map.of("error", "Method not allowed"));
     }
 
     private static void handleAdminAttempts(HttpExchange exchange) throws IOException {
@@ -616,6 +813,130 @@ public class Main {
             sendJson(exchange, 200, Map.of("attempts", attempts));
         } catch (SQLException e) {
             sendJson(exchange, 500, Map.of("error", "Database error while loading attempts"));
+        }
+    }
+
+    private static void handleAdminAttemptReset(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+        if (!isAdmin(exchange)) {
+            sendJson(exchange, 403, Map.of("error", "Admin access required"));
+            return;
+        }
+
+        ResetAttemptsRequest request;
+        try {
+            request = GSON.fromJson(readBody(exchange), ResetAttemptsRequest.class);
+        } catch (JsonSyntaxException e) {
+            sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
+            return;
+        }
+
+        if (request == null || isBlank(request.username)) {
+            sendJson(exchange, 400, Map.of("error", "username is required"));
+            return;
+        }
+
+        String sql = "DELETE FROM attempts WHERE username = ?";
+        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, request.username.trim().toLowerCase());
+            int deleted = ps.executeUpdate();
+            sendJson(exchange, 200, Map.of("success", true, "message", "Attempts reset", "deleted", deleted));
+        } catch (SQLException e) {
+            sendJson(exchange, 500, Map.of("error", "Database error while resetting attempts"));
+        }
+    }
+
+    private static void handleAdminSummary(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+        if (!isAdmin(exchange)) {
+            sendJson(exchange, 403, Map.of("error", "Admin access required"));
+            return;
+        }
+
+        try (Connection connection = getConnection()) {
+            int totalUsers = scalarInt(connection, "SELECT COUNT(*) FROM users WHERE role = 'student'");
+            int totalQuestions = scalarInt(connection, "SELECT COUNT(*) FROM questions");
+            int totalAttempts = scalarInt(connection, "SELECT COUNT(*) FROM attempts");
+            double avgScore = scalarDouble(connection, "SELECT COALESCE(AVG(percentage), 0) FROM attempts");
+            int highestScore = scalarInt(connection, "SELECT COALESCE(MAX(score), 0) FROM attempts");
+
+            sendJson(exchange, 200, Map.of(
+                    "totalUsers", totalUsers,
+                    "totalQuestions", totalQuestions,
+                    "totalAttempts", totalAttempts,
+                    "averagePercentage", avgScore,
+                    "highestScore", highestScore
+            ));
+        } catch (SQLException e) {
+            sendJson(exchange, 500, Map.of("error", "Database error while loading summary"));
+        }
+    }
+
+    private static void handleAdminUsersCsv(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+        if (!isAdmin(exchange)) {
+            sendJson(exchange, 403, Map.of("error", "Admin access required"));
+            return;
+        }
+
+        StringBuilder csv = new StringBuilder();
+        csv.append("full_name,username,role,created_at\n");
+        String sql = "SELECT full_name, username, role, created_at FROM users ORDER BY created_at DESC";
+        try (Connection connection = getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                csv.append(csvEscape(rs.getString("full_name"))).append(",")
+                        .append(csvEscape(rs.getString("username"))).append(",")
+                        .append(csvEscape(rs.getString("role"))).append(",")
+                        .append(csvEscape(rs.getTimestamp("created_at").toInstant().toString())).append("\n");
+            }
+            sendText(exchange, 200, "text/csv; charset=UTF-8", csv.toString());
+        } catch (SQLException e) {
+            sendJson(exchange, 500, Map.of("error", "Database error while exporting users csv"));
+        }
+    }
+
+    private static void handleAdminAttemptsCsv(HttpExchange exchange) throws IOException {
+        if (handleCors(exchange)) return;
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+        if (!isAdmin(exchange)) {
+            sendJson(exchange, 403, Map.of("error", "Admin access required"));
+            return;
+        }
+
+        StringBuilder csv = new StringBuilder();
+        csv.append("id,username,score,total,percentage,submitted_at\n");
+        String sql = "SELECT id, username, score, total, percentage, submitted_at FROM attempts ORDER BY submitted_at DESC";
+        try (Connection connection = getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                csv.append(rs.getLong("id")).append(",")
+                        .append(csvEscape(rs.getString("username"))).append(",")
+                        .append(rs.getInt("score")).append(",")
+                        .append(rs.getInt("total")).append(",")
+                        .append(rs.getDouble("percentage")).append(",")
+                        .append(csvEscape(rs.getTimestamp("submitted_at").toInstant().toString())).append("\n");
+            }
+            sendText(exchange, 200, "text/csv; charset=UTF-8", csv.toString());
+        } catch (SQLException e) {
+            sendJson(exchange, 500, Map.of("error", "Database error while exporting attempts csv"));
         }
     }
 
@@ -849,7 +1170,7 @@ public class Main {
         Headers headers = exchange.getResponseHeaders();
         headers.set("Access-Control-Allow-Origin", "*");
         headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-        headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
             exchange.sendResponseHeaders(204, -1);
             return true;
@@ -871,6 +1192,36 @@ public class Main {
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(data);
         }
+    }
+
+    private static void sendText(HttpExchange exchange, int status, String contentType, String text) throws IOException {
+        handleCors(exchange);
+        byte[] data = text.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.sendResponseHeaders(status, data.length);
+        try (OutputStream output = exchange.getResponseBody()) {
+            output.write(data);
+        }
+    }
+
+    private static int scalarInt(Connection connection, String sql) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
+    private static double scalarDouble(Connection connection, String sql) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getDouble(1);
+        }
+    }
+
+    private static String csvEscape(String value) {
+        if (value == null) return "\"\"";
+        String escaped = value.replace("\"", "\"\"");
+        return "\"" + escaped + "\"";
     }
 
     private static Connection getConnection() throws SQLException {
@@ -966,6 +1317,19 @@ public class Main {
         boolean shuffleQuestions;
         boolean showCorrectAnswers;
         int maxAttemptsPerUser;
+    }
+    private static class UserProfileRequest {
+        String fullName;
+    }
+    private static class AdminUserRoleRequest {
+        String username;
+        String role;
+    }
+    private static class DeleteUserRequest {
+        String username;
+    }
+    private static class ResetAttemptsRequest {
+        String username;
     }
     private static class AppSettings {
         final int questionTimeSeconds;
