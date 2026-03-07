@@ -102,27 +102,30 @@ public class Main {
 
     private static void seedQuestions() throws SQLException {
         List<SeedQuestion> questions = List.of(
-                new SeedQuestion(1, "What is Data Science?", List.of("Study of hardware", "Extracting knowledge from data", "Computer networking", "Software testing"), 1),
-                new SeedQuestion(2, "Which of the following is a programming language commonly used in Data Science?", List.of("Python", "HTML", "CSS", "SQL Server"), 0),
-                new SeedQuestion(3, "Which library is widely used for data analysis in Python?", List.of("NumPy", "Pandas", "Matplotlib", "All of the above"), 3),
-                new SeedQuestion(4, "What type of data is organized in rows and columns?", List.of("Structured Data", "Unstructured Data", "Semi-structured Data", "Raw Data"), 0),
-                new SeedQuestion(5, "Which process involves cleaning and transforming raw data?", List.of("Data Mining", "Data Preprocessing", "Data Visualization", "Data Storage"), 1),
-                new SeedQuestion(6, "Which of the following is used to visualize data?", List.of("Excel", "Tableau", "Power BI", "All of the above"), 3),
-                new SeedQuestion(7, "Which algorithm is used for classification problems?", List.of("Linear Regression", "Decision Tree", "K-Means", "PCA"), 1),
-                new SeedQuestion(8, "What does Big Data refer to?", List.of("Small amount of data", "Large and complex datasets", "Text data only", "Numerical data only"), 1),
-                new SeedQuestion(9, "Which of the following is an example of unstructured data?", List.of("Excel table", "Database table", "Images and videos", "CSV file"), 2),
-                new SeedQuestion(10, "Which technique is used to group similar data points?", List.of("Classification", "Regression", "Clustering", "Sorting"), 2),
-                new SeedQuestion(11, "Which of the following is a Data Science lifecycle step?", List.of("Data Collection", "Data Cleaning", "Data Modeling", "All of the above"), 3),
-                new SeedQuestion(12, "What does ML stand for in Data Science?", List.of("Machine Learning", "Machine Logic", "Mathematical Learning", "Model Language"), 0),
-                new SeedQuestion(13, "Which tool is commonly used for statistical computing?", List.of("R", "Java", "PHP", "Swift"), 0),
-                new SeedQuestion(14, "What is the main purpose of data visualization?", List.of("To store data", "To analyze and present data graphically", "To delete data", "To compress data"), 1),
-                new SeedQuestion(15, "Which of the following is an example of supervised learning?", List.of("Clustering", "Regression", "Association Rule", "Dimensionality Reduction"), 1)
+                new SeedQuestion(1, "The set of symbols used to form strings is called", List.of("Grammar", "Alphabet", "Language", "Expression"), 1),
+                new SeedQuestion(2, "A string with zero length is called", List.of("Null string", "Empty string", "Zero string", "Blank string"), 1),
+                new SeedQuestion(3, "A language is defined as", List.of("Set of alphabets", "Set of strings", "Set of numbers", "Set of grammars"), 1),
+                new SeedQuestion(4, "DFA stands for", List.of("Deterministic Finite Automaton", "Defined Finite Automaton", "Determined Finite Algorithm", "Defined Formal Automaton"), 0),
+                new SeedQuestion(5, "Which automaton is used to recognize regular languages?", List.of("Turing Machine", "Pushdown Automaton", "Finite Automaton", "Linear Automaton"), 2),
+                new SeedQuestion(6, "NFA stands for", List.of("Non-Finite Automaton", "Non-Deterministic Finite Automaton", "New Finite Automaton", "Normal Finite Automaton"), 1),
+                new SeedQuestion(7, "Which symbol represents Kleene star?", List.of("+", "*", "?", "#"), 1),
+                new SeedQuestion(8, "Kleene star means", List.of("One or more occurrences", "Zero or more occurrences", "Exactly one occurrence", "Exactly two occurrences"), 1),
+                new SeedQuestion(9, "Which automaton uses a stack?", List.of("DFA", "NFA", "Pushdown Automaton", "Finite Automaton"), 2),
+                new SeedQuestion(10, "PDA is used to recognize", List.of("Regular Language", "Context Free Language", "Recursive Language", "Unrestricted Language"), 1),
+                new SeedQuestion(11, "Which machine is the most powerful computational model?", List.of("DFA", "NFA", "PDA", "Turing Machine"), 3),
+                new SeedQuestion(12, "The halting problem is", List.of("Decidable", "Undecidable", "Regular", "Context Free"), 1),
+                new SeedQuestion(13, "Grammar that generates context-free languages is called", List.of("Regular Grammar", "Context Free Grammar", "Linear Grammar", "Unrestricted Grammar"), 1),
+                new SeedQuestion(14, "The start symbol in grammar is usually represented by", List.of("A", "S", "Z", "X"), 1),
+                new SeedQuestion(15, "Which of the following is NOT a component of DFA?", List.of("Set of states", "Input alphabet", "Stack", "Transition function"), 2)
         );
 
         String sql = """
                 INSERT INTO questions (id, question_text, options_json, correct_option)
                 VALUES (?, ?, ?, ?)
-                ON CONFLICT (id) DO NOTHING
+                ON CONFLICT (id) DO UPDATE SET
+                    question_text = EXCLUDED.question_text,
+                    options_json = EXCLUDED.options_json,
+                    correct_option = EXCLUDED.correct_option
                 """;
 
         try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
