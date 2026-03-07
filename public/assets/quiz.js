@@ -6,9 +6,8 @@ const welcomeText = document.getElementById("welcomeText");
 const token = localStorage.getItem("ds_token");
 const username = localStorage.getItem("ds_user") || "student";
 const fullName = localStorage.getItem("ds_name") || username;
-const role = (localStorage.getItem("ds_role") || "student").toLowerCase();
 
-let QUESTION_TIME_SECONDS = 30;
+const QUESTION_TIME_SECONDS = 30;
 
 let questions = [];
 let currentIndex = 0;
@@ -19,9 +18,6 @@ let timeLeft = QUESTION_TIME_SECONDS;
 
 if (!token) {
   window.location.href = "/index.html";
-}
-if (role === "admin") {
-  window.location.href = "/admin.html";
 }
 
 welcomeText.textContent = `Logged in as ${fullName}`;
@@ -49,7 +45,6 @@ async function loadQuestions() {
 
     const data = await response.json();
     questions = data.questions || [];
-    QUESTION_TIME_SECONDS = Number(data.settings?.questionTimeSeconds || 30);
 
     if (!questions.length) {
       quizContainer.innerHTML = "<p class='status error'>No questions available.</p>";
@@ -180,15 +175,13 @@ function renderResult(result) {
   quizContainer.classList.add("hidden");
   resultCard.classList.remove("hidden");
 
-  const chips = result.answersVisible
-    ? result.results
+  const chips = result.results
     .map((isCorrect, index) => {
       const cls = isCorrect ? "ok" : "bad";
       const text = isCorrect ? "Correct" : "Wrong";
       return `<span class="result-chip ${cls}">Q${index + 1}: ${text}</span>`;
     })
-    .join("")
-    : "<p class='status'>Correct-answer breakdown is hidden by admin settings.</p>";
+    .join("");
 
   resultCard.innerHTML = `
     <h2>${escapeHtml(fullName)}, your result</h2>

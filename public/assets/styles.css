@@ -253,39 +253,8 @@ button:disabled {
   margin: 0 auto;
 }
 
-.admin-grid {
-  display: grid;
-  gap: 1rem;
-}
-
 .quiz-card {
   padding: 1.2rem;
-}
-
-.admin-form {
-  margin-top: 0.8rem;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.toggle-row input {
-  width: 18px;
-  height: 18px;
-}
-
-.admin-actions {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.table-wrap {
-  margin-top: 0.8rem;
-  overflow-x: auto;
 }
 
 .question-card {

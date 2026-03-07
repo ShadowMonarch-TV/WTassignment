@@ -1,6 +1,5 @@
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
-import com.google.gson.reflect.TypeToken;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -26,7 +25,6 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +34,6 @@ import java.util.concurrent.Executors;
 
 public class Main {
     private static final Gson GSON = new Gson();
-    private static final TypeToken<List<String>> STRING_LIST_TYPE = new TypeToken<>() {};
     private static final int PORT = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
     private static final Path STATIC_ROOT = Paths.get("public").toAbsolutePath().normalize();
     private static final Map<String, String> SESSIONS = new ConcurrentHashMap<>();
@@ -57,11 +54,6 @@ public class Main {
         server.createContext("/api/questions", Main::handleQuestions);
         server.createContext("/api/submit", Main::handleSubmit);
         server.createContext("/api/leaderboard", Main::handleLeaderboard);
-        server.createContext("/api/settings", Main::handleSettings);
-        server.createContext("/api/admin/users", Main::handleAdminUsers);
-        server.createContext("/api/admin/attempts", Main::handleAdminAttempts);
-        server.createContext("/api/admin/questions", Main::handleAdminQuestions);
-        server.createContext("/api/admin/settings", Main::handleAdminSettings);
         server.createContext("/", new StaticFileHandler());
 
         server.setExecutor(Executors.newFixedThreadPool(16));
@@ -78,11 +70,9 @@ public class Main {
                         full_name VARCHAR(120) NOT NULL,
                         password_hash VARCHAR(120) NOT NULL,
                         password_salt VARCHAR(120) NOT NULL,
-                        role VARCHAR(20) NOT NULL DEFAULT 'student',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
                     """);
-            statement.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'student'");
 
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS questions (
@@ -105,22 +95,9 @@ public class Main {
                         submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
                     """);
-
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS app_settings (
-                        id INT PRIMARY KEY,
-                        question_time_seconds INT NOT NULL DEFAULT 30,
-                        shuffle_questions BOOLEAN NOT NULL DEFAULT FALSE,
-                        show_correct_answers BOOLEAN NOT NULL DEFAULT TRUE,
-                        max_attempts_per_user INT NOT NULL DEFAULT 0,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """);
         }
 
         seedQuestions();
-        seedAdminUser();
-        seedDefaultSettings();
     }
 
     private static void seedQuestions() throws SQLException {
@@ -160,32 +137,6 @@ public class Main {
                 ps.addBatch();
             }
             ps.executeBatch();
-        }
-    }
-
-    private static void seedAdminUser() throws SQLException {
-        String salt = generateSalt();
-        String hash = hashPassword("admin123", salt);
-        String sql = """
-                INSERT INTO users (username, full_name, password_hash, password_salt, role)
-                VALUES ('admin', 'System Admin', ?, ?, 'admin')
-                ON CONFLICT (username) DO NOTHING
-                """;
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, hash);
-            ps.setString(2, salt);
-            ps.executeUpdate();
-        }
-    }
-
-    private static void seedDefaultSettings() throws SQLException {
-        String sql = """
-                INSERT INTO app_settings (id, question_time_seconds, shuffle_questions, show_correct_answers, max_attempts_per_user)
-                VALUES (1, 30, FALSE, TRUE, 0)
-                ON CONFLICT (id) DO NOTHING
-                """;
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.executeUpdate();
         }
     }
 
@@ -269,7 +220,7 @@ public class Main {
             return;
         }
 
-        String sql = "SELECT username, full_name, password_hash, password_salt, role FROM users WHERE username = ?";
+        String sql = "SELECT username, full_name, password_hash, password_salt FROM users WHERE username = ?";
         try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, request.username.trim().toLowerCase());
             try (ResultSet rs = ps.executeQuery()) {
@@ -294,8 +245,7 @@ public class Main {
                         "success", true,
                         "token", token,
                         "username", username,
-                        "fullName", rs.getString("full_name"),
-                        "role", rs.getString("role")
+                        "fullName", rs.getString("full_name")
                 ));
             }
         } catch (SQLException e) {
@@ -316,31 +266,6 @@ public class Main {
             return;
         }
 
-        AppSettings settings;
-        try {
-            settings = getSettings();
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while loading settings"));
-            return;
-        }
-
-        if (settings.maxAttemptsPerUser > 0) {
-            try (Connection connection = getConnection();
-                 PreparedStatement ps = connection.prepareStatement("SELECT COUNT(*) AS cnt FROM attempts WHERE username = ?")) {
-                ps.setString(1, username);
-                try (ResultSet rs = ps.executeQuery()) {
-                    rs.next();
-                    if (rs.getInt("cnt") >= settings.maxAttemptsPerUser) {
-                        sendJson(exchange, 403, Map.of("error", "Max attempts reached for this quiz"));
-                        return;
-                    }
-                }
-            } catch (SQLException e) {
-                sendJson(exchange, 500, Map.of("error", "Database error while checking attempts"));
-                return;
-            }
-        }
-
         List<QuestionPayload> questions = new ArrayList<>();
         String sql = "SELECT id, question_text, options_json FROM questions ORDER BY id";
 
@@ -349,7 +274,7 @@ public class Main {
                 int id = rs.getInt("id");
                 String question = rs.getString("question_text");
                 String optionsJson = rs.getString("options_json");
-                List<String> options = parseStringList(optionsJson);
+                List<String> options = GSON.fromJson(optionsJson, List.class);
                 questions.add(new QuestionPayload(id, question, options));
             }
         } catch (SQLException e) {
@@ -357,18 +282,7 @@ public class Main {
             return;
         }
 
-        if (settings.shuffleQuestions) {
-            Collections.shuffle(questions);
-        }
-
-        sendJson(exchange, 200, Map.of(
-                "questions", questions,
-                "settings", Map.of(
-                        "questionTimeSeconds", settings.questionTimeSeconds,
-                        "shuffleQuestions", settings.shuffleQuestions,
-                        "showCorrectAnswers", settings.showCorrectAnswers
-                )
-        ));
+        sendJson(exchange, 200, Map.of("questions", questions));
     }
 
     private static void handleSubmit(HttpExchange exchange) throws IOException {
@@ -381,14 +295,6 @@ public class Main {
         String username = authenticate(exchange);
         if (username == null) {
             sendJson(exchange, 401, Map.of("error", "Unauthorized"));
-            return;
-        }
-
-        AppSettings settings;
-        try {
-            settings = getSettings();
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while loading settings"));
             return;
         }
 
@@ -451,14 +357,13 @@ public class Main {
             return;
         }
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("username", username);
-        response.put("score", score);
-        response.put("total", total);
-        response.put("percentage", percentage);
-        response.put("results", settings.showCorrectAnswers ? results : Collections.nCopies(results.size(), false));
-        response.put("answersVisible", settings.showCorrectAnswers);
-        sendJson(exchange, 200, response);
+        sendJson(exchange, 200, Map.of(
+                "username", username,
+                "score", score,
+                "total", total,
+                "percentage", percentage,
+                "results", results
+        ));
     }
 
     private static void handleLeaderboard(HttpExchange exchange) throws IOException {
@@ -520,173 +425,6 @@ public class Main {
         sendJson(exchange, 200, Map.of("leaderboard", leaderboard));
     }
 
-    private static void handleSettings(HttpExchange exchange) throws IOException {
-        if (handleCors(exchange)) return;
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-            return;
-        }
-
-        String username = authenticate(exchange);
-        if (username == null) {
-            sendJson(exchange, 401, Map.of("error", "Unauthorized"));
-            return;
-        }
-
-        try {
-            AppSettings settings = getSettings();
-            sendJson(exchange, 200, Map.of(
-                    "questionTimeSeconds", settings.questionTimeSeconds,
-                    "shuffleQuestions", settings.shuffleQuestions,
-                    "showCorrectAnswers", settings.showCorrectAnswers,
-                    "maxAttemptsPerUser", settings.maxAttemptsPerUser
-            ));
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while loading settings"));
-        }
-    }
-
-    private static void handleAdminUsers(HttpExchange exchange) throws IOException {
-        if (handleCors(exchange)) return;
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-            return;
-        }
-        if (!isAdmin(exchange)) {
-            sendJson(exchange, 403, Map.of("error", "Admin access required"));
-            return;
-        }
-
-        List<Map<String, Object>> users = new ArrayList<>();
-        String sql = """
-                SELECT username, full_name, role, created_at
-                FROM users
-                ORDER BY created_at DESC
-                """;
-        try (Connection connection = getConnection();
-             PreparedStatement ps = connection.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                users.add(Map.of(
-                        "username", rs.getString("username"),
-                        "fullName", rs.getString("full_name"),
-                        "role", rs.getString("role"),
-                        "createdAt", rs.getTimestamp("created_at").toInstant().toString()
-                ));
-            }
-            sendJson(exchange, 200, Map.of("users", users));
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while loading users"));
-        }
-    }
-
-    private static void handleAdminAttempts(HttpExchange exchange) throws IOException {
-        if (handleCors(exchange)) return;
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-            return;
-        }
-        if (!isAdmin(exchange)) {
-            sendJson(exchange, 403, Map.of("error", "Admin access required"));
-            return;
-        }
-
-        List<Map<String, Object>> attempts = new ArrayList<>();
-        String sql = """
-                SELECT a.id, a.username, u.full_name, a.score, a.total, a.percentage, a.submitted_at
-                FROM attempts a
-                JOIN users u ON u.username = a.username
-                ORDER BY a.submitted_at DESC
-                LIMIT 200
-                """;
-        try (Connection connection = getConnection();
-             PreparedStatement ps = connection.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                attempts.add(Map.of(
-                        "id", rs.getLong("id"),
-                        "username", rs.getString("username"),
-                        "fullName", rs.getString("full_name"),
-                        "score", rs.getInt("score"),
-                        "total", rs.getInt("total"),
-                        "percentage", rs.getDouble("percentage"),
-                        "submittedAt", rs.getTimestamp("submitted_at").toInstant().toString()
-                ));
-            }
-            sendJson(exchange, 200, Map.of("attempts", attempts));
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while loading attempts"));
-        }
-    }
-
-    private static void handleAdminQuestions(HttpExchange exchange) throws IOException {
-        if (handleCors(exchange)) return;
-        if (!isAdmin(exchange)) {
-            sendJson(exchange, 403, Map.of("error", "Admin access required"));
-            return;
-        }
-
-        try {
-            String method = exchange.getRequestMethod().toUpperCase();
-            switch (method) {
-                case "GET" -> sendJson(exchange, 200, Map.of("questions", fetchQuestionsWithAnswers()));
-                case "POST" -> createQuestion(exchange);
-                case "PUT" -> updateQuestion(exchange);
-                case "DELETE" -> deleteQuestion(exchange);
-                default -> sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-            }
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while handling questions"));
-        }
-    }
-
-    private static void handleAdminSettings(HttpExchange exchange) throws IOException {
-        if (handleCors(exchange)) return;
-        if (!isAdmin(exchange)) {
-            sendJson(exchange, 403, Map.of("error", "Admin access required"));
-            return;
-        }
-
-        if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            handleSettings(exchange);
-            return;
-        }
-
-        if (!"PUT".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-            return;
-        }
-
-        AdminSettingsRequest request;
-        try {
-            request = GSON.fromJson(readBody(exchange), AdminSettingsRequest.class);
-        } catch (JsonSyntaxException e) {
-            sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
-            return;
-        }
-
-        if (request == null || request.questionTimeSeconds < 5 || request.questionTimeSeconds > 180 || request.maxAttemptsPerUser < 0) {
-            sendJson(exchange, 400, Map.of("error", "Invalid settings values"));
-            return;
-        }
-
-        String sql = """
-                UPDATE app_settings
-                SET question_time_seconds = ?, shuffle_questions = ?, show_correct_answers = ?, max_attempts_per_user = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-                """;
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setInt(1, request.questionTimeSeconds);
-            ps.setBoolean(2, request.shuffleQuestions);
-            ps.setBoolean(3, request.showCorrectAnswers);
-            ps.setInt(4, request.maxAttemptsPerUser);
-            ps.executeUpdate();
-            sendJson(exchange, 200, Map.of("success", true, "message", "Settings updated"));
-        } catch (SQLException e) {
-            sendJson(exchange, 500, Map.of("error", "Database error while saving settings"));
-        }
-    }
-
     private static String authenticate(HttpExchange exchange) {
         Headers headers = exchange.getRequestHeaders();
         String auth = headers.getFirst("Authorization");
@@ -695,154 +433,6 @@ public class Main {
         }
         String token = auth.substring(7).trim();
         return SESSIONS.get(token);
-    }
-
-    private static boolean isAdmin(HttpExchange exchange) {
-        String username = authenticate(exchange);
-        if (username == null) {
-            return false;
-        }
-        String sql = "SELECT role FROM users WHERE username = ?";
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, username);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() && "admin".equalsIgnoreCase(rs.getString("role"));
-            }
-        } catch (SQLException e) {
-            return false;
-        }
-    }
-
-    private static AppSettings getSettings() throws SQLException {
-        String sql = "SELECT question_time_seconds, shuffle_questions, show_correct_answers, max_attempts_per_user FROM app_settings WHERE id = 1";
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-                return new AppSettings(
-                        rs.getInt("question_time_seconds"),
-                        rs.getBoolean("shuffle_questions"),
-                        rs.getBoolean("show_correct_answers"),
-                        rs.getInt("max_attempts_per_user")
-                );
-            }
-        }
-        return new AppSettings(30, false, true, 0);
-    }
-
-    private static List<String> parseStringList(String rawJson) {
-        List<String> parsed = GSON.fromJson(rawJson, STRING_LIST_TYPE.getType());
-        return parsed == null ? List.of() : parsed;
-    }
-
-    private static List<Map<String, Object>> fetchQuestionsWithAnswers() throws SQLException {
-        List<Map<String, Object>> questions = new ArrayList<>();
-        String sql = "SELECT id, question_text, options_json, correct_option FROM questions ORDER BY id";
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                questions.add(Map.of(
-                        "id", rs.getInt("id"),
-                        "question", rs.getString("question_text"),
-                        "options", parseStringList(rs.getString("options_json")),
-                        "correctOptionIndex", rs.getInt("correct_option")
-                ));
-            }
-        }
-        return questions;
-    }
-
-    private static void createQuestion(HttpExchange exchange) throws IOException, SQLException {
-        AdminQuestionRequest request;
-        try {
-            request = GSON.fromJson(readBody(exchange), AdminQuestionRequest.class);
-        } catch (JsonSyntaxException e) {
-            sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
-            return;
-        }
-        if (!isValidQuestionRequest(request)) {
-            sendJson(exchange, 400, Map.of("error", "Invalid question payload"));
-            return;
-        }
-        String sql = "INSERT INTO questions (id, question_text, options_json, correct_option) VALUES (?, ?, ?, ?)";
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setInt(1, request.id);
-            ps.setString(2, request.question.trim());
-            ps.setString(3, GSON.toJson(request.options));
-            ps.setInt(4, request.correctOptionIndex);
-            ps.executeUpdate();
-            sendJson(exchange, 201, Map.of("success", true, "message", "Question created"));
-        } catch (SQLException e) {
-            if (e.getSQLState() != null && e.getSQLState().startsWith("23")) {
-                sendJson(exchange, 409, Map.of("error", "Question ID already exists"));
-                return;
-            }
-            throw e;
-        }
-    }
-
-    private static void updateQuestion(HttpExchange exchange) throws IOException, SQLException {
-        AdminQuestionRequest request;
-        try {
-            request = GSON.fromJson(readBody(exchange), AdminQuestionRequest.class);
-        } catch (JsonSyntaxException e) {
-            sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
-            return;
-        }
-        if (!isValidQuestionRequest(request)) {
-            sendJson(exchange, 400, Map.of("error", "Invalid question payload"));
-            return;
-        }
-        String sql = """
-                UPDATE questions
-                SET question_text = ?, options_json = ?, correct_option = ?
-                WHERE id = ?
-                """;
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, request.question.trim());
-            ps.setString(2, GSON.toJson(request.options));
-            ps.setInt(3, request.correctOptionIndex);
-            ps.setInt(4, request.id);
-            int changed = ps.executeUpdate();
-            if (changed == 0) {
-                sendJson(exchange, 404, Map.of("error", "Question not found"));
-                return;
-            }
-            sendJson(exchange, 200, Map.of("success", true, "message", "Question updated"));
-        }
-    }
-
-    private static void deleteQuestion(HttpExchange exchange) throws IOException, SQLException {
-        DeleteQuestionRequest request;
-        try {
-            request = GSON.fromJson(readBody(exchange), DeleteQuestionRequest.class);
-        } catch (JsonSyntaxException e) {
-            sendJson(exchange, 400, Map.of("error", "Invalid JSON payload"));
-            return;
-        }
-        if (request == null || request.id < 1) {
-            sendJson(exchange, 400, Map.of("error", "Valid question id is required"));
-            return;
-        }
-        String sql = "DELETE FROM questions WHERE id = ?";
-        try (Connection connection = getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setInt(1, request.id);
-            int changed = ps.executeUpdate();
-            if (changed == 0) {
-                sendJson(exchange, 404, Map.of("error", "Question not found"));
-                return;
-            }
-            sendJson(exchange, 200, Map.of("success", true, "message", "Question deleted"));
-        }
-    }
-
-    private static boolean isValidQuestionRequest(AdminQuestionRequest request) {
-        if (request == null || request.id < 1 || isBlank(request.question) || request.options == null || request.options.size() < 2) {
-            return false;
-        }
-        for (String option : request.options) {
-            if (isBlank(option)) {
-                return false;
-            }
-        }
-        return request.correctOptionIndex >= 0 && request.correctOptionIndex < request.options.size();
     }
 
     private static boolean handleCors(HttpExchange exchange) throws IOException {
@@ -952,34 +542,6 @@ public class Main {
     private record SeedQuestion(int id, String question, List<String> options, int correctOptionIndex) {}
     private record QuestionPayload(int id, String question, List<String> options) {}
     private record LeaderboardEntry(String fullName, String username, int score, int total, double percentage, String submittedAt) {}
-    private static class AdminQuestionRequest {
-        int id;
-        String question;
-        List<String> options;
-        int correctOptionIndex;
-    }
-    private static class DeleteQuestionRequest {
-        int id;
-    }
-    private static class AdminSettingsRequest {
-        int questionTimeSeconds;
-        boolean shuffleQuestions;
-        boolean showCorrectAnswers;
-        int maxAttemptsPerUser;
-    }
-    private static class AppSettings {
-        final int questionTimeSeconds;
-        final boolean shuffleQuestions;
-        final boolean showCorrectAnswers;
-        final int maxAttemptsPerUser;
-
-        AppSettings(int questionTimeSeconds, boolean shuffleQuestions, boolean showCorrectAnswers, int maxAttemptsPerUser) {
-            this.questionTimeSeconds = questionTimeSeconds;
-            this.shuffleQuestions = shuffleQuestions;
-            this.showCorrectAnswers = showCorrectAnswers;
-            this.maxAttemptsPerUser = maxAttemptsPerUser;
-        }
-    }
 
     private static class QuestionRecord {
         final int id;
