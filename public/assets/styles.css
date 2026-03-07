@@ -161,16 +161,6 @@ input {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-select {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0.82rem 0.9rem;
-  color: var(--text);
-  font-size: 1rem;
-  outline: none;
-}
-
 input:focus {
   border-color: rgba(37, 99, 235, 0.45);
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
@@ -296,31 +286,6 @@ button:disabled {
 .table-wrap {
   margin-top: 0.8rem;
   overflow-x: auto;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.7rem;
-}
-
-.summary-card {
-  background: var(--surface-solid);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.8rem;
-}
-
-.summary-card .k {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 0.85rem;
-}
-
-.summary-card .v {
-  margin: 0.4rem 0 0;
-  font-size: 1.35rem;
-  font-weight: 700;
 }
 
 .question-card {

@@ -25,30 +25,8 @@ function headers() {
 }
 
 async function loadAll() {
-  await Promise.all([loadSummary(), loadSettings(), loadQuestions(), loadUsers(), loadAttempts()]);
+  await Promise.all([loadSettings(), loadQuestions(), loadUsers(), loadAttempts()]);
 }
-
-async function loadSummary() {
-  const response = await fetch("/api/admin/summary", { headers: { Authorization: `Bearer ${token}` } });
-  const data = await response.json();
-  if (!response.ok) return;
-
-  document.getElementById("summaryCards").innerHTML = `
-    <article class="summary-card"><p class="k">Students</p><p class="v">${data.totalUsers}</p></article>
-    <article class="summary-card"><p class="k">Questions</p><p class="v">${data.totalQuestions}</p></article>
-    <article class="summary-card"><p class="k">Attempts</p><p class="v">${data.totalAttempts}</p></article>
-    <article class="summary-card"><p class="k">Avg %</p><p class="v">${Number(data.averagePercentage).toFixed(2)}</p></article>
-    <article class="summary-card"><p class="k">Top Score</p><p class="v">${data.highestScore}</p></article>
-  `;
-}
-
-document.getElementById("exportUsersBtn").addEventListener("click", () => {
-  downloadCsv("/api/admin/export/users.csv", "users.csv");
-});
-
-document.getElementById("exportAttemptsBtn").addEventListener("click", () => {
-  downloadCsv("/api/admin/export/attempts.csv", "attempts.csv");
-});
 
 async function loadSettings() {
   const response = await fetch("/api/admin/settings", { headers: { Authorization: `Bearer ${token}` } });
@@ -138,40 +116,6 @@ async function loadQuestions() {
   `;
 }
 
-document.getElementById("updateRoleBtn").addEventListener("click", async () => {
-  const username = document.getElementById("manageUsername").value.trim();
-  const role = document.getElementById("manageRole").value;
-
-  const response = await fetch("/api/admin/users/manage", {
-    method: "PUT",
-    headers: headers(),
-    body: JSON.stringify({ username, role })
-  });
-  const data = await response.json();
-  setMessage("userManageMsg", data.message || data.error || "Done", response.ok);
-  if (response.ok) {
-    await loadUsers();
-    await loadSummary();
-  }
-});
-
-document.getElementById("deleteUserBtn").addEventListener("click", async () => {
-  const username = document.getElementById("manageUsername").value.trim();
-
-  const response = await fetch("/api/admin/users/manage", {
-    method: "DELETE",
-    headers: headers(),
-    body: JSON.stringify({ username })
-  });
-  const data = await response.json();
-  setMessage("userManageMsg", data.message || data.error || "Done", response.ok);
-  if (response.ok) {
-    await loadUsers();
-    await loadAttempts();
-    await loadSummary();
-  }
-});
-
 async function loadUsers() {
   const response = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } });
   const data = await response.json();
@@ -194,21 +138,6 @@ async function loadUsers() {
   `;
 }
 
-document.getElementById("resetAttemptsBtn").addEventListener("click", async () => {
-  const username = document.getElementById("resetUsername").value.trim();
-  const response = await fetch("/api/admin/attempts/reset", {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ username })
-  });
-  const data = await response.json();
-  setMessage("attemptResetMsg", `${data.message || data.error || "Done"}${response.ok ? ` (${data.deleted} deleted)` : ""}`, response.ok);
-  if (response.ok) {
-    await loadAttempts();
-    await loadSummary();
-  }
-});
-
 async function loadAttempts() {
   const response = await fetch("/api/admin/attempts", { headers: { Authorization: `Bearer ${token}` } });
   const data = await response.json();
@@ -229,30 +158,6 @@ async function loadAttempts() {
       <tbody>${rows}</tbody>
     </table>
   `;
-}
-
-function setMessage(id, text, ok) {
-  const el = document.getElementById(id);
-  el.textContent = text;
-  el.className = ok ? "status success" : "status error";
-}
-
-async function downloadCsv(url, filename) {
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) {
-    const data = await response.json();
-    alert(data.error || "Export failed.");
-    return;
-  }
-  const blob = await response.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = blobUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(blobUrl);
 }
 
 function escapeHtml(value) {
