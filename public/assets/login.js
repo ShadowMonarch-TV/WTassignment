@@ -37,6 +37,12 @@ form.addEventListener("submit", async (event) => {
     localStorage.setItem("ds_token", data.token);
     localStorage.setItem("ds_user", data.username);
     localStorage.setItem("ds_name", data.fullName || data.username);
+    localStorage.setItem("ds_role", data.role || "student");
+
+    if ((data.role || "").toLowerCase() === "admin") {
+      window.location.href = "/admin.html";
+      return;
+    }
     window.location.href = "/quiz.html";
   } catch (error) {
     setStatus("Server error. Please try again.", true);

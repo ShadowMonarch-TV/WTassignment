@@ -1,0 +1,80 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - Quiz Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body class="quiz-page">
+  <header class="topbar">
+    <div>
+      <p class="tag">Admin Console</p>
+      <h1>Quiz Management Dashboard</h1>
+      <p id="adminWelcome" class="sub small"></p>
+    </div>
+    <button id="logoutBtn" class="btn-outline">Logout</button>
+  </header>
+
+  <main class="quiz-shell admin-grid">
+    <section class="quiz-card">
+      <h2>Quiz Settings</h2>
+      <form id="settingsForm" class="form-grid admin-form">
+        <label>
+          Question Timer (seconds)
+          <input type="number" id="questionTimeSeconds" min="5" max="180" required />
+        </label>
+        <label>
+          Max Attempts Per User (0 = unlimited)
+          <input type="number" id="maxAttemptsPerUser" min="0" required />
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="shuffleQuestions" />
+          <span>Shuffle question order</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="showCorrectAnswers" />
+          <span>Show correct/wrong chips after submission</span>
+        </label>
+        <button type="submit">Save Settings</button>
+      </form>
+      <p id="settingsMsg" class="status"></p>
+    </section>
+
+    <section class="quiz-card">
+      <h2>Questions (CRUD)</h2>
+      <form id="questionForm" class="form-grid admin-form">
+        <label>Question ID<input type="number" id="qId" min="1" required /></label>
+        <label>Question Text<input type="text" id="qText" required /></label>
+        <label>Option A<input type="text" id="qOpt0" required /></label>
+        <label>Option B<input type="text" id="qOpt1" required /></label>
+        <label>Option C<input type="text" id="qOpt2" required /></label>
+        <label>Option D<input type="text" id="qOpt3" required /></label>
+        <label>Correct Option Index (0-3)<input type="number" id="qCorrect" min="0" max="3" required /></label>
+        <div class="admin-actions">
+          <button type="button" id="createQuestionBtn">Create</button>
+          <button type="button" id="updateQuestionBtn">Update</button>
+          <button type="button" id="deleteQuestionBtn" class="btn-outline">Delete</button>
+        </div>
+      </form>
+      <p id="questionMsg" class="status"></p>
+      <div id="questionsTableWrap" class="table-wrap"></div>
+    </section>
+
+    <section class="quiz-card">
+      <h2>Users</h2>
+      <div id="usersTableWrap" class="table-wrap"></div>
+    </section>
+
+    <section class="quiz-card">
+      <h2>Recent Attempts</h2>
+      <div id="attemptsTableWrap" class="table-wrap"></div>
+    </section>
+  </main>
+
+  <script src="/assets/admin.js"></script>
+</body>
+</html>
